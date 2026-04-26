@@ -1,0 +1,61 @@
+flowchart TB
+    subgraph WC["微信 Mac 4.x"]
+        WCApp["WeChat.app<br/>(持续运行)"]
+    end
+
+    subgraph DB["加密数据库 (SQLCipher 4)"]
+        direction LR
+        MsgDB[("message_0.db<br/>聊天消息")]
+        ContactDB[("contact.db<br/>联系人")]
+        SessionDB[("session.db<br/>会话列表")]
+    end
+
+    WCApp -->|写入加密数据| DB
+
+    subgraph Setup["① 一次性安装（首次）"]
+        Extract["extract_keys.py<br/>· codesign 重签<br/>· frida hook PBKDF2<br/>· 抓 3 个 DB 密钥"]
+        ListContacts["list_contacts.py<br/>列出群和联系人"]
+    end
+
+    subgraph Config["~/.config/"]
+        Keys[/"wechat-keys.json<br/>3 把 AES 密钥"/]
+        Conf[/"wechat-daily.json<br/>wxid · 监控群 · 输出路径"/]
+    end
+
+    Extract -->|保存| Keys
+    Extract -->|保存| Conf
+    DB -.->|提取一次| Extract
+
+    subgraph Run["② 日常使用（每次跑）"]
+        Daily["wechat_daily.py<br/>每天生成报告"]
+        Watch["wechat_watch.py<br/>实时监控（直读）"]
+    end
+
+    Keys -->|读取密钥| Daily
+    Keys -->|读取密钥| Watch
+    Conf -->|读配置| Daily
+    Conf -->|读配置| Watch
+    DB -->|解密读取| Daily
+    DB -->|sqlcipher 直读<br/>每 3s| Watch
+
+    subgraph Out["输出"]
+        Report["~/Documents/wechat-daily/<br/>YYYY-MM-DD.md<br/>Claude 精华摘要"]
+        Notify["macOS 通知中心<br/>+ stdout"]
+    end
+
+    Daily --> Report
+    Watch --> Notify
+
+    classDef source fill:#fff4e6,stroke:#ff9800,stroke-width:2px,color:#000
+    classDef encrypted fill:#fce4ec,stroke:#c2185b,stroke-width:2px,color:#000
+    classDef setup fill:#e3f2fd,stroke:#1976d2,stroke-width:2px,color:#000
+    classDef config fill:#fff9c4,stroke:#f9a825,stroke-width:2px,color:#000
+    classDef daily fill:#e8f5e9,stroke:#388e3c,stroke-width:2px,color:#000
+    classDef out fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px,color:#000
+
+    class WCApp source
+    class MsgDB,ContactDB,SessionDB encrypted
+    class Extract,ListContacts setup
+    class Keys,Conf config
+    class Daily,Watch daily
+    class Report,Notify out
